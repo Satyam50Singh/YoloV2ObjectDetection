@@ -1,0 +1,4 @@
+<resources>
+    <string name="app_name">Object Detection Yolo V2</string>
+    <string name="lbl_progress_loading">Loading</string>
+</resources>
