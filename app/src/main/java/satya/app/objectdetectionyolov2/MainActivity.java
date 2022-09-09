@@ -1,14 +1,7 @@
 package satya.app.objectdetectionyolov2;
 
-import androidx.appcompat.app.AppCompatActivity;
-import androidx.core.app.ActivityCompat;
-import androidx.core.content.ContextCompat;
-
 import android.Manifest;
-import android.annotation.SuppressLint;
-import android.app.Activity;
 import android.app.AlertDialog;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.database.Cursor;
@@ -17,19 +10,19 @@ import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
-import android.graphics.drawable.BitmapDrawable;
-import android.graphics.drawable.Drawable;
 import android.media.ThumbnailUtils;
 import android.net.Uri;
 import android.os.Bundle;
 import android.provider.MediaStore;
-import android.util.Log;
-import android.view.View;
 import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
 import android.widget.TextView;
 import android.widget.Toast;
+
+import androidx.appcompat.app.AppCompatActivity;
+import androidx.core.app.ActivityCompat;
+import androidx.core.content.ContextCompat;
 
 import org.tensorflow.lite.DataType;
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer;
@@ -44,11 +37,12 @@ import satya.app.objectdetectionyolov2.ml.Yolov2;
 
 public class MainActivity extends AppCompatActivity {
 
-    private static final String TAG = "MainActivity";
     private static final int REQUEST_ID_MULTIPLE_PERMISSIONS = 100101;
-    ImageView imageView;
     int imageSize = 416;
-    TextView tvNoOfObjectDetected, tvPriority, tvObjectCoordinates, tvClassName;
+
+    // UI Controls
+    ImageView imageView;
+    TextView tvNoOfObjectDetected, tvPriority, tvClassName;
     RelativeLayout rlProgressBar;
     Button btnCaptureImage;
 
@@ -56,6 +50,12 @@ public class MainActivity extends AppCompatActivity {
     protected void onCreate(Bundle savedInstanceState) {
         super.onCreate(savedInstanceState);
         setContentView(R.layout.activity_main);
+
+        initUI();
+    }
+
+    // method to initialise controls
+    private void initUI() {
         imageView = findViewById(R.id.imageView);
         tvNoOfObjectDetected = findViewById(R.id.tvNoOfObjectDetected);
         tvPriority = findViewById(R.id.tvPriority);
@@ -64,45 +64,36 @@ public class MainActivity extends AppCompatActivity {
         btnCaptureImage = findViewById(R.id.btn_capture_image);
 
         btnCaptureImage.setOnClickListener(view -> {
-            if (checkAndRequestPermissions()) {
-                chooseImage(this);
-            } else {
-
+            try {
+                if (checkAndRequestPermissions()) {
+                    // if camera and gallery permissions granted
+                    chooseImage();
+                }
+            } catch (Exception e) {
+                e.printStackTrace();
             }
         });
-
-
-//        tvObjectCoordinates = findViewById(R.id.tvObjectCoordinates);
-
-//        try {
-//            @SuppressLint("UseCompatLoadingForDrawables")
-//            Drawable d = getDrawable(R.drawable.img2); // the drawable (Captain Obvious, to the rescue!!!)
-//            Bitmap bitmap = ((BitmapDrawable) d).getBitmap();
-//            int dimension = Math.min(bitmap.getWidth(), bitmap.getHeight());
-//            bitmap = ThumbnailUtils.extractThumbnail(bitmap, dimension, dimension);
-//            imageView.setImageBitmap(bitmap);
-//
-//            bitmap = Bitmap.createScaledBitmap(bitmap, imageSize, imageSize, false);
-//            classifyImage(bitmap);
-//        } catch (Exception e) {
-//            e.printStackTrace();
-//        }
     }
 
+    // check camera and gallery permissions.
     public boolean checkAndRequestPermissions() {
-        int storagePermission = ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE);
-        int cameraPermission = ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA);
+        try {
+            int storagePermission = ContextCompat.checkSelfPermission(this, Manifest.permission.WRITE_EXTERNAL_STORAGE);
+            int cameraPermission = ContextCompat.checkSelfPermission(MainActivity.this, Manifest.permission.CAMERA);
 
-        List<String> listPermissionsNeeded = new ArrayList<>();
-        if (cameraPermission != PackageManager.PERMISSION_GRANTED) {
-            listPermissionsNeeded.add(Manifest.permission.CAMERA);
-        }
-        if (storagePermission != PackageManager.PERMISSION_GRANTED) {
-            listPermissionsNeeded.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
-        }
-        if (!listPermissionsNeeded.isEmpty()) {
-            ActivityCompat.requestPermissions(this, listPermissionsNeeded.toArray(new String[listPermissionsNeeded.size()]), REQUEST_ID_MULTIPLE_PERMISSIONS);
-            return false;
+            List<String> listPermissionsNeeded = new ArrayList<>();
+            if (cameraPermission != PackageManager.PERMISSION_GRANTED) {
+                listPermissionsNeeded.add(Manifest.permission.CAMERA);
+            }
+            if (storagePermission != PackageManager.PERMISSION_GRANTED) {
+                listPermissionsNeeded.add(Manifest.permission.WRITE_EXTERNAL_STORAGE);
+            }
+            if (!listPermissionsNeeded.isEmpty()) {
+                ActivityCompat.requestPermissions(this, listPermissionsNeeded.toArray(new String[listPermissionsNeeded.size()]), REQUEST_ID_MULTIPLE_PERMISSIONS);
+                return false;
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
         return true;
     }
@@ -112,8 +103,8 @@ public class MainActivity extends AppCompatActivity {
     @Override
     public void onRequestPermissionsResult(int requestCode, String[] permissions, int[] grantResults) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults);
-        switch (requestCode) {
-            case REQUEST_ID_MULTIPLE_PERMISSIONS:
+        try {
+            if (requestCode == REQUEST_ID_MULTIPLE_PERMISSIONS) {
                 if (ContextCompat.checkSelfPermission(MainActivity.this,
                         Manifest.permission.CAMERA) != PackageManager.PERMISSION_GRANTED) {
                     Toast.makeText(getApplicationContext(), "FlagUp Requires Access to Camara.", Toast.LENGTH_SHORT).show();
@@ -123,37 +114,39 @@ public class MainActivity extends AppCompatActivity {
                     Toast.makeText(getApplicationContext(), "FlagUp Requires Access to Your Storage.", Toast.LENGTH_SHORT).show();
                     checkAndRequestPermissions();
                 } else {
-                    chooseImage(MainActivity.this);
+                    // if camera and gallery permissions granted
+                    chooseImage();
                 }
-                break;
-            default:
+            } else {
                 throw new IllegalStateException("Unexpected value: " + requestCode);
+            }
+        } catch (Exception e) {
+            e.printStackTrace();
         }
     }
 
-    private void chooseImage(MainActivity mainActivity) {
-        // create a menuOption Array
-        final CharSequence[] optionsMenu = {"Take Photo", "Choose from Gallery", "Exit"};
-        // create a dialog for showing the optionsMenu
-        AlertDialog.Builder builder = new AlertDialog.Builder(this);
-        // set the items in builder
-        builder.setItems(optionsMenu, new DialogInterface.OnClickListener() {
-            @Override
-            public void onClick(DialogInterface dialogInterface, int i) {
-                if (optionsMenu[i].equals("Take Photo")) {
+    // method to show alert dialog for different options
+    private void chooseImage() {
+        try {
+            final CharSequence[] optionsMenu = {getString(R.string.take_photo), getString(R.string.choose_from_gallery), getString(R.string.exit)};
+            AlertDialog.Builder builder = new AlertDialog.Builder(this);
+            builder.setItems(optionsMenu, (dialogInterface, i) -> {
+                if (optionsMenu[i].equals(getString(R.string.take_photo))) {
                     // Open the camera and get the photo
-                    Intent takePicture = new Intent(android.provider.MediaStore.ACTION_IMAGE_CAPTURE);
+                    Intent takePicture = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
                     startActivityForResult(takePicture, 0);
-                } else if (optionsMenu[i].equals("Choose from Gallery")) {
+                } else if (optionsMenu[i].equals(getString(R.string.choose_from_gallery))) {
                     // choose from  external storage
-                    Intent pickPhoto = new Intent(Intent.ACTION_PICK, android.provider.MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
+                    Intent pickPhoto = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
                     startActivityForResult(pickPhoto, 1);
-                } else if (optionsMenu[i].equals("Exit")) {
+                } else if (optionsMenu[i].equals(getString(R.string.exit))) {
                     dialogInterface.dismiss();
                 }
-            }
-        });
-        builder.show();
+            });
+            builder.show();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
     }
 
     @Override
@@ -198,6 +191,7 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
+    // method to classify Image Objects
     private void classifyImage(Bitmap image) {
         try {
             Yolov2 model = Yolov2.newInstance(this);
@@ -232,21 +226,21 @@ public class MainActivity extends AppCompatActivity {
 
             // Runs model inference and gets result.
             Yolov2.Outputs outputs = model.process(inputFeature0, inputFeature1, inputFeature1);
+
             TensorBuffer outputFeature0 = outputs.getOutputFeature0AsTensorBuffer();
             float[] noOfDetection = outputFeature0.getFloatArray();
             int totalObjects = (int) noOfDetection[0];
-            tvNoOfObjectDetected.setText("No of Objects Detected : " + String.valueOf(noOfDetection[0]));
+            tvNoOfObjectDetected.setText(getString(R.string.no_of_object_detected) + noOfDetection[0]);
 
             TensorBuffer outputFeature1 = outputs.getOutputFeature1AsTensorBuffer();
             float[] probability = outputFeature1.getFloatArray();
-            tvPriority.setText("Probability : ");
+            tvPriority.setText(R.string.probability);
             for (int i = 0; i < totalObjects; i++) {
                 tvPriority.append(probability[i] * 100 + "%  , ");
             }
 
             TensorBuffer outputFeature2 = outputs.getOutputFeature2AsTensorBuffer();
             float[] coordinates = outputFeature2.getFloatArray();
-            double[] x_min = new double[0], y_min = new double[0], width = new double[0], height = new double[0];
 
             // Code to draw bounding boxes  ----------------------------------------------------------------------------------------------
             Canvas canvas = new Canvas(image);
@@ -266,9 +260,6 @@ public class MainActivity extends AppCompatActivity {
 
             //-------------------------------------------------------------------------------------------------------------------------------------
 
-
-            Log.e(TAG, "classifyImage: " + x_min + "  " + y_min + "  " + width + "  " + height);
-
             TensorBuffer outputFeature3 = outputs.getOutputFeature3AsTensorBuffer();
             float[] index = outputFeature3.getFloatArray();
             int i = (int) index[0];
@@ -276,32 +267,15 @@ public class MainActivity extends AppCompatActivity {
             String[] class_names = new String[]{"aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow",
                     "dining table", "dog", "horse", "motorbike", "person", "potted plant", "sheep", "sofa", "train", "tv monitor"};
 
-            tvClassName.setText("Class Name : ");
+            tvClassName.setText(R.string.class_name);
             for (int j = 0; j < totalObjects; j++) {
                 tvClassName.append(class_names[(int) index[j]].toUpperCase() + "  , ");
             }
             tvClassName.setTextColor(getColor(R.color.purple_500));
 
-//            Canvas canvas = new Canvas(image);
-//
-//            Paint paint = new Paint();
-//            paint.setColor(Color.BLACK);
-//            paint.setStyle(Paint.Style.STROKE);
-//            paint.setStrokeWidth(10);
-//            float leftx = (float) x_min;
-//            float topy = (float) y_min;
-//            float rightx = (float) (x_min + width);
-//            float bottomy = (float) (y_min + height);
-//            canvas.drawRect(leftx, topy, rightx, bottomy, paint);
-
-            imageView.setImageBitmap(image);
-
-
-            Log.e(TAG, "classifyImage: ");
             // Releases model resources if no longer used.
             model.close();
         } catch (IOException e) {
-            // TODO Handle the exception
             e.printStackTrace();
         }
     }
