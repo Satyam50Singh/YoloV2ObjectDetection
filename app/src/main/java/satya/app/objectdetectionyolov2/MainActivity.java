@@ -274,14 +274,14 @@ public class MainActivity extends AppCompatActivity {
                 }
             }
 
-            // p - threshold
+            // p - threshold :: if confidence value is greater than p-threshold then only show the bounding boxes.
             TensorBuffer inputFeature1 = TensorBuffer.createFixedSize(new int[]{1, 1}, DataType.FLOAT32);
             ByteBuffer byteBuffer1 = ByteBuffer.allocateDirect(4);
             inputFeature1.loadBuffer(byteBuffer1);
             byteBuffer1.order(ByteOrder.nativeOrder());
             byteBuffer1.putFloat(pThreshold);
 
-            // nms - threshold
+            // nms - threshold :: this remove the overlapped bounding boxes.
             TensorBuffer inputFeature2 = TensorBuffer.createFixedSize(new int[]{1, 1}, DataType.FLOAT32);
             ByteBuffer byteBuffer2 = ByteBuffer.allocateDirect(4);
             inputFeature2.loadBuffer(byteBuffer2);
@@ -289,7 +289,7 @@ public class MainActivity extends AppCompatActivity {
             byteBuffer2.putFloat(nmsThreshold);
 
             // Runs model inference and gets result.
-            Yolov2.Outputs outputs = model.process(inputFeature0, inputFeature1, inputFeature2);
+            Yolov2.Outputs outputs = model.process(inputFeature0, inputFeature2, inputFeature1);
 
             TensorBuffer outputFeature0 = outputs.getOutputFeature0AsTensorBuffer();
             float[] noOfDetection = outputFeature0.getFloatArray();
