@@ -11,4 +11,6 @@
     <string name="input_feature_nms_threshold">Input Feature - NMS Threshold</string>
     <string name="output">Output</string>
     <string name="do_want_to_close_this_app">Do want to close this App ?</string>
+    <string name="all_rights_reserved">All Rights Reserved</string>
+    <string name="copyright_2022_anuj_panthri_and_satyam_singh">Copyright \u00a9 2022 Anuj Panthri and Satyam Singh</string>
 </resources>
