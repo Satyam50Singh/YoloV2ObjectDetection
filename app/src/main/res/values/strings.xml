@@ -7,4 +7,8 @@
     <string name="probability">\"Probability : \"</string>
     <string name="no_of_object_detected">\"No of Objects Detected : \"</string>
     <string name="class_name">\"Class Name : \"</string>
+    <string name="input_feature_p_threshold">Input Feature - P Threshold</string>
+    <string name="input_feature_nms_threshold">Input Feature - NMS Threshold</string>
+    <string name="output">Output</string>
+    <string name="do_want_to_close_this_app">Do want to close this App ?</string>
 </resources>
