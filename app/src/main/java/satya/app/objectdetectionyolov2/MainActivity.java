@@ -72,16 +72,17 @@ public class MainActivity extends AppCompatActivity {
                 public void onActivityResult(ActivityResult result) {
                     if (result.getResultCode() == Activity.RESULT_OK) {
                         // There are no request codes
-                        Bitmap renderedBitmap = Utils.getBitmapFromUri(imageCapturedUri, MainActivity.this);
-                        int dimension = Math.min(renderedBitmap.getWidth(), renderedBitmap.getHeight());
-                        renderedBitmap = ThumbnailUtils.extractThumbnail(renderedBitmap, dimension, dimension);
-
-                        renderedBitmap = Bitmap.createScaledBitmap(renderedBitmap, imageSize, imageSize, false);
-                        classifyImage(renderedBitmap);
+                        classifyImage(imageCapturedUri);
                     }
                 }
             });
 
+    ActivityResultLauncher<String> galleryActivityResultLauncher = registerForActivityResult(
+            new ActivityResultContracts.GetContent(),
+            result -> {
+                // There are no request codes
+                classifyImage(result);
+            });
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -227,8 +228,7 @@ public class MainActivity extends AppCompatActivity {
                     cameraActivityResultLauncher.launch(cameraIntent);
                 } else if (optionsMenu[i].equals(getString(R.string.choose_from_gallery))) {
                     // choose from  external storage
-                    Intent pickPhoto = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
-                    startActivityForResult(pickPhoto, 1);
+                    galleryActivityResultLauncher.launch("image/*");
                 } else if (optionsMenu[i].equals(getString(R.string.exit))) {
                     dialogInterface.dismiss();
                 }
@@ -239,140 +239,120 @@ public class MainActivity extends AppCompatActivity {
         }
     }
 
-    @Override
-    protected void onActivityResult(int requestCode, int resultCode, Intent data) {
-        super.onActivityResult(requestCode, resultCode, data);
-        if (resultCode != RESULT_CANCELED) {
-            if (requestCode == 1) {
-                if (resultCode == RESULT_OK && data != null) {
-                    Uri selectedImage = data.getData();
-                    String[] filePathColumn = {MediaStore.Images.Media.DATA};
-                    if (selectedImage != null) {
-                        Cursor cursor = getContentResolver().query(selectedImage, filePathColumn, null, null, null);
-                        if (cursor != null) {
-                            cursor.moveToFirst();
-                            int columnIndex = cursor.getColumnIndex(filePathColumn[0]);
-                            String picturePath = cursor.getString(columnIndex);
-                            Bitmap imageBitmap = BitmapFactory.decodeFile(picturePath);
-                            int dimension = Math.min(imageBitmap.getWidth(), imageBitmap.getHeight());
-                            imageBitmap = ThumbnailUtils.extractThumbnail(imageBitmap, dimension, dimension);
-                            imageView.setImageBitmap(imageBitmap);
+    // method to classify Image Objects
+    private void classifyImage(Uri imageUri) {
+        if (imageUri != null) {
+            // converting uri to bitmap
+            Bitmap image = Utils.getBitmapFromUri(imageUri, MainActivity.this);
+            int dimension = Math.min(image.getWidth(), image.getHeight());
+            image = ThumbnailUtils.extractThumbnail(image, dimension, dimension);
 
-                            imageBitmap = Bitmap.createScaledBitmap(imageBitmap, imageSize, imageSize, false);
-                            classifyImage(imageBitmap);
-                            cursor.close();
-                        }
+            image = Bitmap.createScaledBitmap(image, imageSize, imageSize, false);
+
+            rlProgressBar.setVisibility(View.VISIBLE);
+
+            try {
+                Yolov2 model = Yolov2.newInstance(this);
+
+                // Creates inputs for reference.
+                TensorBuffer inputFeature0 = TensorBuffer.createFixedSize(new int[]{1, 416, 416, 3}, DataType.FLOAT32);
+                ByteBuffer byteBuffer = ByteBuffer.allocateDirect(4 * imageSize * imageSize * 3);
+                byteBuffer.order(ByteOrder.nativeOrder());
+                inputFeature0.loadBuffer(byteBuffer);
+
+
+                int[] intValues = new int[imageSize * imageSize];
+                image.getPixels(intValues, 0, image.getWidth(), 0, 0, image.getWidth(), image.getHeight());
+
+                int pixel = 0;
+
+                for (int i = 0; i < imageSize; i++) {
+                    for (int j = 0; j < imageSize; j++) {
+                        int val = intValues[pixel++];
+                        byteBuffer.putFloat(((val >> 16) & 0xFF) * (1.f / 1));
+                        byteBuffer.putFloat(((val >> 8) & 0xFF) * (1.f / 1));
+                        byteBuffer.putFloat((val & 0xFF) * (1.f / 1));
                     }
                 }
-            }
-        }
-    }
 
-    // method to classify Image Objects
-    private void classifyImage(Bitmap image) {
-        rlProgressBar.setVisibility(View.VISIBLE);
+                // p - threshold :: if confidence value is greater than p-threshold then only show the bounding boxes.
+                TensorBuffer inputFeature1 = TensorBuffer.createFixedSize(new int[]{1, 1}, DataType.FLOAT32);
+                ByteBuffer byteBuffer1 = ByteBuffer.allocateDirect(4);
+                inputFeature1.loadBuffer(byteBuffer1);
+                byteBuffer1.order(ByteOrder.nativeOrder());
+                byteBuffer1.putFloat(pThreshold);
 
-        try {
-            Yolov2 model = Yolov2.newInstance(this);
+                // nms - threshold :: this remove the overlapped bounding boxes.
+                TensorBuffer inputFeature2 = TensorBuffer.createFixedSize(new int[]{1, 1}, DataType.FLOAT32);
+                ByteBuffer byteBuffer2 = ByteBuffer.allocateDirect(4);
+                inputFeature2.loadBuffer(byteBuffer2);
+                byteBuffer2.order(ByteOrder.nativeOrder());
+                byteBuffer2.putFloat(nmsThreshold);
 
-            // Creates inputs for reference.
-            TensorBuffer inputFeature0 = TensorBuffer.createFixedSize(new int[]{1, 416, 416, 3}, DataType.FLOAT32);
-            ByteBuffer byteBuffer = ByteBuffer.allocateDirect(4 * imageSize * imageSize * 3);
-            byteBuffer.order(ByteOrder.nativeOrder());
-            inputFeature0.loadBuffer(byteBuffer);
+                // Runs model inference and gets result.
+                Yolov2.Outputs outputs = model.process(inputFeature0, inputFeature2, inputFeature1);
 
+                TensorBuffer outputFeature0 = outputs.getOutputFeature0AsTensorBuffer();
+                float[] noOfDetection = outputFeature0.getFloatArray();
+                int totalObjects = (int) noOfDetection[0];
+                tvNoOfObjectDetected.setText(getString(R.string.no_of_object_detected) + noOfDetection[0]);
 
-            int[] intValues = new int[imageSize * imageSize];
-            image.getPixels(intValues, 0, image.getWidth(), 0, 0, image.getWidth(), image.getHeight());
-
-            int pixel = 0;
-
-            for (int i = 0; i < imageSize; i++) {
-                for (int j = 0; j < imageSize; j++) {
-                    int val = intValues[pixel++];
-                    byteBuffer.putFloat(((val >> 16) & 0xFF) * (1.f / 1));
-                    byteBuffer.putFloat(((val >> 8) & 0xFF) * (1.f / 1));
-                    byteBuffer.putFloat((val & 0xFF) * (1.f / 1));
+                TensorBuffer outputFeature1 = outputs.getOutputFeature1AsTensorBuffer();
+                float[] probability = outputFeature1.getFloatArray();
+                tvPriority.setText(R.string.probability);
+                for (int i = 0; i < totalObjects; i++) {
+                    tvPriority.append(probability[i] * 100 + "%, ");
                 }
+
+                TensorBuffer outputFeature2 = outputs.getOutputFeature2AsTensorBuffer();
+                float[] coordinates = outputFeature2.getFloatArray();
+
+                TensorBuffer outputFeature3 = outputs.getOutputFeature3AsTensorBuffer();
+                float[] classIndexes = outputFeature3.getFloatArray();
+                int i = (int) classIndexes[0];
+
+                String[] class_names = new String[]{"aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow",
+                        "dining table", "dog", "horse", "motorbike", "person", "potted plant", "sheep", "sofa", "train", "tv monitor"};
+
+                tvClassName.setText(R.string.class_name);
+                for (int j = 0; j < totalObjects; j++) {
+                    tvClassName.append(class_names[(int) classIndexes[j]].toUpperCase() + ", ");
+                }
+
+                // Code to draw bounding boxes  ----------------------------------------------------------------------------------------------
+                Canvas canvas = new Canvas(image);
+                Paint paint = new Paint();
+                paint.setColor(Color.BLACK);
+                paint.setStyle(Paint.Style.STROKE);
+                paint.setStrokeWidth(6);
+
+                Paint textStyle = new Paint(Paint.ANTI_ALIAS_FLAG);
+                textStyle.setColor(Color.BLACK);
+                Resources resources = getResources();
+                float scale = resources.getDisplayMetrics().density;
+                textStyle.setTextSize((int) (15 * scale));
+                textStyle.setColor(getColor(R.color.black));
+
+                int indexVal = 0;
+                for (int k = 0; k < totalObjects * 4; k += 4) {
+                    float leftx = (float) Math.ceil(coordinates[k]);
+                    float topy = (float) Math.ceil(coordinates[k + 1]);
+                    float rightx = (float) Math.ceil(coordinates[k + 2]) + (float) Math.ceil(coordinates[k]);
+                    float bottomy = (float) Math.ceil(coordinates[k + 1]) + (float) Math.ceil(coordinates[k + 3]);
+                    canvas.drawRect(leftx, topy, rightx, bottomy, paint);
+                    canvas.drawText(class_names[(int) classIndexes[indexVal++]].toUpperCase(), leftx, topy, textStyle);
+                }
+                imageView.setImageBitmap(image);
+
+                //-------------------------------------------------------------------------------------------------------------------------------------
+
+
+                // Releases model resources if no longer used.
+                model.close();
+                rlProgressBar.setVisibility(View.GONE);
+            } catch (IOException e) {
+                e.printStackTrace();
             }
-
-            // p - threshold :: if confidence value is greater than p-threshold then only show the bounding boxes.
-            TensorBuffer inputFeature1 = TensorBuffer.createFixedSize(new int[]{1, 1}, DataType.FLOAT32);
-            ByteBuffer byteBuffer1 = ByteBuffer.allocateDirect(4);
-            inputFeature1.loadBuffer(byteBuffer1);
-            byteBuffer1.order(ByteOrder.nativeOrder());
-            byteBuffer1.putFloat(pThreshold);
-
-            // nms - threshold :: this remove the overlapped bounding boxes.
-            TensorBuffer inputFeature2 = TensorBuffer.createFixedSize(new int[]{1, 1}, DataType.FLOAT32);
-            ByteBuffer byteBuffer2 = ByteBuffer.allocateDirect(4);
-            inputFeature2.loadBuffer(byteBuffer2);
-            byteBuffer2.order(ByteOrder.nativeOrder());
-            byteBuffer2.putFloat(nmsThreshold);
-
-            // Runs model inference and gets result.
-            Yolov2.Outputs outputs = model.process(inputFeature0, inputFeature2, inputFeature1);
-
-            TensorBuffer outputFeature0 = outputs.getOutputFeature0AsTensorBuffer();
-            float[] noOfDetection = outputFeature0.getFloatArray();
-            int totalObjects = (int) noOfDetection[0];
-            tvNoOfObjectDetected.setText(getString(R.string.no_of_object_detected) + noOfDetection[0]);
-
-            TensorBuffer outputFeature1 = outputs.getOutputFeature1AsTensorBuffer();
-            float[] probability = outputFeature1.getFloatArray();
-            tvPriority.setText(R.string.probability);
-            for (int i = 0; i < totalObjects; i++) {
-                tvPriority.append(probability[i] * 100 + "%, ");
-            }
-
-            TensorBuffer outputFeature2 = outputs.getOutputFeature2AsTensorBuffer();
-            float[] coordinates = outputFeature2.getFloatArray();
-
-            TensorBuffer outputFeature3 = outputs.getOutputFeature3AsTensorBuffer();
-            float[] classIndexes = outputFeature3.getFloatArray();
-            int i = (int) classIndexes[0];
-
-            String[] class_names = new String[]{"aeroplane", "bicycle", "bird", "boat", "bottle", "bus", "car", "cat", "chair", "cow",
-                    "dining table", "dog", "horse", "motorbike", "person", "potted plant", "sheep", "sofa", "train", "tv monitor"};
-
-            tvClassName.setText(R.string.class_name);
-            for (int j = 0; j < totalObjects; j++) {
-                tvClassName.append(class_names[(int) classIndexes[j]].toUpperCase() + ", ");
-            }
-
-            // Code to draw bounding boxes  ----------------------------------------------------------------------------------------------
-            Canvas canvas = new Canvas(image);
-            Paint paint = new Paint();
-            paint.setColor(Color.BLACK);
-            paint.setStyle(Paint.Style.STROKE);
-            paint.setStrokeWidth(6);
-
-            Paint textStyle = new Paint(Paint.ANTI_ALIAS_FLAG);
-            textStyle.setColor(Color.BLACK);
-            Resources resources = getResources();
-            float scale = resources.getDisplayMetrics().density;
-            textStyle.setTextSize((int) (15 * scale));
-            textStyle.setColor(getColor(R.color.black));
-
-            int indexVal = 0;
-            for (int k = 0; k < totalObjects * 4; k += 4) {
-                float leftx = (float) Math.ceil(coordinates[k]);
-                float topy = (float) Math.ceil(coordinates[k + 1]);
-                float rightx = (float) Math.ceil(coordinates[k + 2]) + (float) Math.ceil(coordinates[k]);
-                float bottomy = (float) Math.ceil(coordinates[k + 1]) + (float) Math.ceil(coordinates[k + 3]);
-                canvas.drawRect(leftx, topy, rightx, bottomy, paint);
-                canvas.drawText(class_names[(int) classIndexes[indexVal++]].toUpperCase(), leftx, topy, textStyle);
-            }
-            imageView.setImageBitmap(image);
-
-            //-------------------------------------------------------------------------------------------------------------------------------------
-
-
-            // Releases model resources if no longer used.
-            model.close();
-            rlProgressBar.setVisibility(View.GONE);
-        } catch (IOException e) {
-            e.printStackTrace();
         }
     }
 
