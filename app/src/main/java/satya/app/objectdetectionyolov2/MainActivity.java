@@ -1,7 +1,9 @@
 package satya.app.objectdetectionyolov2;
 
 import android.Manifest;
+import android.app.Activity;
 import android.app.AlertDialog;
+import android.content.ContentValues;
 import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
@@ -25,6 +27,10 @@ import android.widget.SeekBar;
 import android.widget.TextView;
 import android.widget.Toast;
 
+import androidx.activity.result.ActivityResult;
+import androidx.activity.result.ActivityResultCallback;
+import androidx.activity.result.ActivityResultLauncher;
+import androidx.activity.result.contract.ActivityResultContracts;
 import androidx.appcompat.app.AppCompatActivity;
 import androidx.appcompat.widget.AppCompatButton;
 import androidx.core.app.ActivityCompat;
@@ -37,9 +43,11 @@ import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
 import java.util.ArrayList;
+import java.util.Date;
 import java.util.List;
 
 import satya.app.objectdetectionyolov2.ml.Yolov2;
+import satya.app.objectdetectionyolov2.utils.Utils;
 
 public class MainActivity extends AppCompatActivity {
 
@@ -54,6 +62,26 @@ public class MainActivity extends AppCompatActivity {
     SeekBar sbPThreshold, sbNmsThreshold;
     private static final String TAG = "MainActivity";
     float pThreshold = 0.5f, nmsThreshold = 0.5f;
+    Uri imageCapturedUri;
+
+    // You can do the assignment inside onAttach or onCreate, i.e, before the activity is displayed
+    ActivityResultLauncher<Intent> cameraActivityResultLauncher = registerForActivityResult(
+            new ActivityResultContracts.StartActivityForResult(),
+            new ActivityResultCallback<ActivityResult>() {
+                @Override
+                public void onActivityResult(ActivityResult result) {
+                    if (result.getResultCode() == Activity.RESULT_OK) {
+                        // There are no request codes
+                        Bitmap renderedBitmap = Utils.getBitmapFromUri(imageCapturedUri, MainActivity.this);
+                        int dimension = Math.min(renderedBitmap.getWidth(), renderedBitmap.getHeight());
+                        renderedBitmap = ThumbnailUtils.extractThumbnail(renderedBitmap, dimension, dimension);
+
+                        renderedBitmap = Bitmap.createScaledBitmap(renderedBitmap, imageSize, imageSize, false);
+                        classifyImage(renderedBitmap);
+                    }
+                }
+            });
+
 
     @Override
     protected void onCreate(Bundle savedInstanceState) {
@@ -188,8 +216,15 @@ public class MainActivity extends AppCompatActivity {
             builder.setItems(optionsMenu, (dialogInterface, i) -> {
                 if (optionsMenu[i].equals(getString(R.string.take_photo))) {
                     // Open the camera and get the photo
-                    Intent takePicture = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
-                    startActivityForResult(takePicture, 0);
+                    ContentValues values = new ContentValues();
+                    values.put(MediaStore.Images.Media.TITLE, "Object " + new Date().getTime());
+                    values.put(MediaStore.Images.Media.DESCRIPTION, "From Camera");
+                    imageCapturedUri = getContentResolver().insert(MediaStore.Images.Media.EXTERNAL_CONTENT_URI, values);
+
+                    Intent cameraIntent = new Intent(MediaStore.ACTION_IMAGE_CAPTURE);
+                    cameraIntent.putExtra(MediaStore.EXTRA_OUTPUT, imageCapturedUri);
+
+                    cameraActivityResultLauncher.launch(cameraIntent);
                 } else if (optionsMenu[i].equals(getString(R.string.choose_from_gallery))) {
                     // choose from  external storage
                     Intent pickPhoto = new Intent(Intent.ACTION_PICK, MediaStore.Images.Media.EXTERNAL_CONTENT_URI);
@@ -208,40 +243,27 @@ public class MainActivity extends AppCompatActivity {
     protected void onActivityResult(int requestCode, int resultCode, Intent data) {
         super.onActivityResult(requestCode, resultCode, data);
         if (resultCode != RESULT_CANCELED) {
-            switch (requestCode) {
-                case 0:
-                    if (resultCode == RESULT_OK && data != null) {
-                        Bitmap selectedImage = (Bitmap) data.getExtras().get("data");
-                        int dimension = Math.min(selectedImage.getWidth(), selectedImage.getHeight());
-                        selectedImage = ThumbnailUtils.extractThumbnail(selectedImage, dimension, dimension);
-                        imageView.setImageBitmap(selectedImage);
+            if (requestCode == 1) {
+                if (resultCode == RESULT_OK && data != null) {
+                    Uri selectedImage = data.getData();
+                    String[] filePathColumn = {MediaStore.Images.Media.DATA};
+                    if (selectedImage != null) {
+                        Cursor cursor = getContentResolver().query(selectedImage, filePathColumn, null, null, null);
+                        if (cursor != null) {
+                            cursor.moveToFirst();
+                            int columnIndex = cursor.getColumnIndex(filePathColumn[0]);
+                            String picturePath = cursor.getString(columnIndex);
+                            Bitmap imageBitmap = BitmapFactory.decodeFile(picturePath);
+                            int dimension = Math.min(imageBitmap.getWidth(), imageBitmap.getHeight());
+                            imageBitmap = ThumbnailUtils.extractThumbnail(imageBitmap, dimension, dimension);
+                            imageView.setImageBitmap(imageBitmap);
 
-                        selectedImage = Bitmap.createScaledBitmap(selectedImage, imageSize, imageSize, false);
-                        classifyImage(selectedImage);
-                    }
-                    break;
-                case 1:
-                    if (resultCode == RESULT_OK && data != null) {
-                        Uri selectedImage = data.getData();
-                        String[] filePathColumn = {MediaStore.Images.Media.DATA};
-                        if (selectedImage != null) {
-                            Cursor cursor = getContentResolver().query(selectedImage, filePathColumn, null, null, null);
-                            if (cursor != null) {
-                                cursor.moveToFirst();
-                                int columnIndex = cursor.getColumnIndex(filePathColumn[0]);
-                                String picturePath = cursor.getString(columnIndex);
-                                Bitmap imageBitmap = BitmapFactory.decodeFile(picturePath);
-                                int dimension = Math.min(imageBitmap.getWidth(), imageBitmap.getHeight());
-                                imageBitmap = ThumbnailUtils.extractThumbnail(imageBitmap, dimension, dimension);
-                                imageView.setImageBitmap(imageBitmap);
-
-                                imageBitmap = Bitmap.createScaledBitmap(imageBitmap, imageSize, imageSize, false);
-                                classifyImage(imageBitmap);
-                                cursor.close();
-                            }
+                            imageBitmap = Bitmap.createScaledBitmap(imageBitmap, imageSize, imageSize, false);
+                            classifyImage(imageBitmap);
+                            cursor.close();
                         }
                     }
-                    break;
+                }
             }
         }
     }
