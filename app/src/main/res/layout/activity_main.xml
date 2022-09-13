@@ -120,14 +120,30 @@
                 app:layout_constraintStart_toStartOf="parent"
                 app:layout_constraintTop_toBottomOf="@+id/imageView">
 
-                <TextView
+                <LinearLayout
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:text="@string/output"
-                    android:textAlignment="center"
-                    android:textColor="@color/black"
-                    android:textSize="16sp"
-                    android:textStyle="bold" />
+                    android:gravity="center"
+                    android:orientation="horizontal">
+
+
+                    <TextView
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:layout_weight="1"
+                        android:text="@string/output"
+                        android:textAlignment="center"
+                        android:textColor="@color/black"
+                        android:textSize="16sp"
+                        android:textStyle="bold" />
+
+                    <ImageView
+                        android:id="@+id/iv_save_output_image"
+                        android:layout_width="wrap_content"
+                        android:layout_height="wrap_content"
+                        android:src="@drawable/ic_baseline_download_24"
+                        app:tint="@color/purple_700" />
+                </LinearLayout>
 
                 <View
                     android:layout_width="match_parent"
@@ -183,8 +199,8 @@
         android:visibility="gone">
 
         <androidx.cardview.widget.CardView
-            android:layout_width="200dp"
-            android:layout_height="100dp"
+            android:layout_width="160dp"
+            android:layout_height="70dp"
             android:layout_centerInParent="true"
             app:cardCornerRadius="10dp"
             app:cardElevation="4dp"
@@ -197,8 +213,8 @@
                 android:gravity="center">
 
                 <ProgressBar
-                    android:layout_width="wrap_content"
-                    android:layout_height="wrap_content"
+                    android:layout_width="20dp"
+                    android:layout_height="20dp"
                     android:indeterminateTint="@android:color/white" />
 
                 <TextView

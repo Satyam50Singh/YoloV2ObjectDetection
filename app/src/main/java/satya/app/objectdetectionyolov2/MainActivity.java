@@ -4,23 +4,21 @@ import android.Manifest;
 import android.app.Activity;
 import android.app.AlertDialog;
 import android.content.ContentValues;
-import android.content.DialogInterface;
 import android.content.Intent;
 import android.content.pm.PackageManager;
 import android.content.res.Resources;
-import android.database.Cursor;
 import android.graphics.Bitmap;
-import android.graphics.BitmapFactory;
 import android.graphics.Canvas;
 import android.graphics.Color;
 import android.graphics.Paint;
+import android.graphics.drawable.BitmapDrawable;
 import android.media.ThumbnailUtils;
 import android.net.Uri;
 import android.os.Bundle;
+import android.os.Environment;
 import android.provider.MediaStore;
 import android.util.Log;
 import android.view.View;
-import android.widget.Button;
 import android.widget.ImageView;
 import android.widget.RelativeLayout;
 import android.widget.SeekBar;
@@ -39,6 +37,8 @@ import androidx.core.content.ContextCompat;
 import org.tensorflow.lite.DataType;
 import org.tensorflow.lite.support.tensorbuffer.TensorBuffer;
 
+import java.io.File;
+import java.io.FileOutputStream;
 import java.io.IOException;
 import java.nio.ByteBuffer;
 import java.nio.ByteOrder;
@@ -55,7 +55,7 @@ public class MainActivity extends AppCompatActivity {
     int imageSize = 416;
 
     // UI Controls
-    ImageView imageView;
+    ImageView imageView, ivSaveOutputImage;
     TextView tvNoOfObjectDetected, tvPriority, tvClassName, tvPValue, tvNmsValue;
     RelativeLayout rlProgressBar;
     AppCompatButton btnCaptureImage;
@@ -106,6 +106,8 @@ public class MainActivity extends AppCompatActivity {
         sbNmsThreshold = findViewById(R.id.sb_nms_threshold);
         tvPValue = findViewById(R.id.tv_p_value);
         tvNmsValue = findViewById(R.id.tv_nms_value);
+        ivSaveOutputImage = findViewById(R.id.iv_save_output_image);
+        ivSaveOutputImage.setVisibility(View.GONE);
     }
 
     private void setListeners() {
@@ -157,6 +159,8 @@ public class MainActivity extends AppCompatActivity {
                 e.printStackTrace();
             }
         });
+
+        ivSaveOutputImage.setOnClickListener(view -> downloadImageInGallery());
     }
 
     // check camera and gallery permissions.
@@ -181,7 +185,6 @@ public class MainActivity extends AppCompatActivity {
         }
         return true;
     }
-
 
     // Handled permission Result
     @Override
@@ -342,7 +345,10 @@ public class MainActivity extends AppCompatActivity {
                     canvas.drawRect(leftx, topy, rightx, bottomy, paint);
                     canvas.drawText(class_names[(int) classIndexes[indexVal++]].toUpperCase(), leftx, topy, textStyle);
                 }
-                imageView.setImageBitmap(image);
+                if (image != null) {
+                    imageView.setImageBitmap(image);
+                    ivSaveOutputImage.setVisibility(View.VISIBLE);
+                }
 
                 //-------------------------------------------------------------------------------------------------------------------------------------
 
@@ -355,5 +361,42 @@ public class MainActivity extends AppCompatActivity {
             }
         }
     }
+
+    private void downloadImageInGallery() {
+        rlProgressBar.setVisibility(View.VISIBLE);
+        Bitmap bitmap = ((BitmapDrawable) imageView.getDrawable()).getBitmap();
+
+        FileOutputStream fileOutputStream = null;
+        File file = Environment.getExternalStoragePublicDirectory(Environment.DIRECTORY_PICTURES);
+        File dir = new File(file + "/objectDetectionOutputs");
+        if (!dir.exists())
+            dir.mkdirs();
+        String filename = String.format("Output %d.png", System.currentTimeMillis());
+        File outFile = new File(dir, filename);
+        try {
+            fileOutputStream = new FileOutputStream(outFile);
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        if (bitmap != null) {
+            bitmap.compress(Bitmap.CompressFormat.PNG, 100, fileOutputStream);
+        }
+        try {
+            fileOutputStream.flush();
+        } catch (Exception e) {
+            e.printStackTrace();
+        }
+
+        try {
+            fileOutputStream.close();
+            rlProgressBar.setVisibility(View.GONE);
+            Toast.makeText(this, R.string.download_successfully, Toast.LENGTH_LONG).show();
+        } catch (IOException e) {
+            e.printStackTrace();
+        }
+
+    }
+
 
 }
